@@ -25,6 +25,7 @@ class AudioFileItem(NamedTuple):
 
 class Model:
     _pending: deque[AudioFileItem] = deque()
+    # Should change _mfccs, _labels to numpy array with dynamic expanding someday
     _mfccs: list[NDArray[np.float32]] = []
     _labels: list[np.int32] = []
     _sample_rate: float
@@ -122,13 +123,15 @@ class Model:
                     except Exception as ex:
                         print(f"Error processing audio: {ex}")
 
-    def save_mfccs_from_file(self, f: str | os.PathLike[str]) -> None:
-        np.save(f, np.array((self._mfccs, self._labels)))
+    def save_mfccs_to_file(self, mfccs_filename: str | os.PathLike[str],
+                           labels_filename: str | os.PathLike[str]) -> None:
+        np.save(mfccs_filename, np.array(self._mfccs))
+        np.save(labels_filename, np.array(self._labels))
 
-    def load_mfccs_from_file(self, f: str | bytes | os.PathLike[str] | os.PathLike[bytes]) -> None:
-        x, labels = np.load(f)
-        self._mfccs.extend(x)
-        self._labels.extend(labels)
+    def load_mfccs_from_file(self, mfccs_filename: str | os.PathLike[str],
+                             labels_filename: str | os.PathLike[str]) -> None:
+        self._mfccs.extend(np.load(mfccs_filename))
+        self._labels.extend(np.load(labels_filename))
 
     @staticmethod
     def get_available_gpu() -> None:
@@ -156,22 +159,25 @@ class Model:
         )
         self.model.summary()
 
-    def fit(self, show_plot=True) -> None:
+    def fit(self, show_plot=False) -> None:
         if self.model is None:
             raise ValueError("Model is not initialized. Call init_model() first.")
         fit_history = self.model.fit(
-            self._mfccs,
-            self._labels,
+            np.array(self._mfccs, dtype=np.float32),
+            np.array(self._labels, dtype=np.int32),
             validation_split=0.2,
             epochs=50,
-            batch_size=32,
-            verbose=2,
+            batch_size=128,
             callbacks=[
                 keras.callbacks.EarlyStopping(monitor='val_loss', patience=5,
                                               restore_best_weights=True)
             ]
         )
-        self.model.evaluate(self._mfccs, self._labels, verbose=2)
+        loss, accuracy = self.model.evaluate(
+            np.array(self._mfccs, dtype=np.float32),
+            np.array(self._labels, dtype=np.float32))
+        print(f"Train loss: {loss}")
+        print(f"Train accuracy: {accuracy}")
         if show_plot:
             import matplotlib.pyplot as plt
             plt.subplots(1, 2, figsize=(12, 4))
@@ -198,13 +204,13 @@ class Model:
         mfcc = np.expand_dims(mfcc, axis=0)  # Add batch dimension
         prediction = self.model.predict(mfcc)[0]
         print(prediction)
-        predicted_index = np.argmax(prediction, axis=1)
-        predicted_emotion = Emotion(predicted_index)
-        print(f"Predicted Emotion: {predicted_emotion.name} ({prediction[predicted_emotion.value]})")
+        for i, prob in enumerate(prediction):
+            print(f"{Emotion(i).name}: {prob * 100:.2f}%")
 
     def predict_from_file(self, f: str | os.PathLike[str]) -> None:
         y, _ = librosa.load(f, sr=self._sample_rate)
         mfcc = self.extract_mfcc(y, self._sample_rate, self._n_mfcc)
+        print(f"Predict file: {f}")
         self.predict(mfcc)
 
     def save_model(self, f: str | os.PathLike[str]) -> None:
