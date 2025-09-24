@@ -159,7 +159,7 @@ class Model:
         )
         self.model.summary()
 
-    def fit(self, show_plot=False) -> None:
+    def fit(self, evaluate=False, show_plot=False) -> Any:
         if self.model is None:
             raise ValueError("Model is not initialized. Call init_model() first.")
         fit_history = self.model.fit(
@@ -173,11 +173,10 @@ class Model:
                                               restore_best_weights=True)
             ]
         )
-        loss, accuracy = self.model.evaluate(
-            np.array(self._mfccs, dtype=np.float32),
-            np.array(self._labels, dtype=np.float32))
-        print(f"Train loss: {loss}")
-        print(f"Train accuracy: {accuracy}")
+        if evaluate:
+            loss, accuracy = self.evaluate()
+            print(f"Train loss: {loss}")
+            print(f"Train accuracy: {accuracy}")
         if show_plot:
             import matplotlib.pyplot as plt
             plt.subplots(1, 2, figsize=(12, 4))
@@ -197,6 +196,14 @@ class Model:
             plt.show()
         print(
             f"Approx. model memory: {self.model.count_params() * np.dtype(self.model.trainable_weights[0].dtype).itemsize / 1024 ** 2:.2f} MB")
+        return fit_history
+
+    def evaluate(self) -> tuple[float, float]:
+        if self.model is None:
+            raise ValueError("Model is not initialized. Call init_model() first.")
+        return self.model.evaluate(
+            np.array(self._mfccs, dtype=np.float32),
+            np.array(self._labels, dtype=np.float32))
 
     def predict(self, mfcc: NDArray[np.float32]) -> None:
         if self.model is None:
