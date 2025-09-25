@@ -230,7 +230,6 @@ class Model:
         self.model.save(f)
 
     def load_model(self, f: str | bytes | os.PathLike[str]) -> None:
-        import keras
         self.model = keras.saving.load_model(f)
 
     def clear_mfccs(self) -> None:
