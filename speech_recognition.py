@@ -141,7 +141,7 @@ class Model:
         print("Default backend:", jax.default_backend())
         print("Available devices:", jax.devices())
 
-    def init_model(self, summary=True) -> None:
+    def init_model(self) -> None:
         keras.backend.clear_session()
         self.model = keras.models.Sequential([
             keras.layers.Input(shape=(40,)),
@@ -158,8 +158,19 @@ class Model:
             loss='sparse_categorical_crossentropy',
             metrics=['accuracy']
         )
-        if summary:
-            self.model.summary()
+
+    def summary(self):
+        if self.model is None:
+            raise ValueError("Model is not initialized. Call init_model() first.")
+        self.model.summary()
+        print(
+            f"MFCC shape: {self._mfccs[0].shape}\n"
+            f"Total MFCC samples: {len(self._mfccs)}\n"
+            f"Total labels: {len(self._labels)}\n"
+            f"Sample rate: {self._sample_rate}\n"
+            f"Number of MFCCs: {self._n_mfcc}\n"
+            f"Approx. model memory: {self.model.count_params() * np.dtype(self.model.trainable_weights[0].dtype).itemsize / 1024 ** 2:.2f} MB"
+        )
 
     def fit(self, evaluate=False, show_plot=False, verbose=2) -> Any:
         if self.model is None:
@@ -197,8 +208,6 @@ class Model:
             plt.legend()
             plt.ylim(0, 1.0)
             plt.show()
-        print(
-            f"Approx. model memory: {self.model.count_params() * np.dtype(self.model.trainable_weights[0].dtype).itemsize / 1024 ** 2:.2f} MB")
         return fit_history
 
     def evaluate(self, verbose=0) -> tuple[float, float]:
