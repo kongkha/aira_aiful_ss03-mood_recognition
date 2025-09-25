@@ -61,7 +61,7 @@ class Model:
 
     @staticmethod
     def extract_mfcc(y: np.ndarray, sr: float, n_mfcc: int) -> NDArray[np.float32]:
-        return np.mean(librosa.feature.mfcc(y=y, sr=sr, n_mfcc=n_mfcc).T, axis=0)
+        return np.mean(librosa.feature.mfcc(y=y, sr=sr, n_mfcc=n_mfcc).T, axis=0).astype(np.float32)
 
     @staticmethod
     def _generate_augmented_audios(y: np.ndarray, sr: float, target_length=None) \
@@ -141,7 +141,8 @@ class Model:
         print("Default backend:", jax.default_backend())
         print("Available devices:", jax.devices())
 
-    def init_model(self) -> None:
+    def init_model(self, summary=True) -> None:
+        keras.backend.clear_session()
         self.model = keras.models.Sequential([
             keras.layers.Input(shape=(40,)),
             keras.layers.Dense(256, activation='relu'),
@@ -157,9 +158,10 @@ class Model:
             loss='sparse_categorical_crossentropy',
             metrics=['accuracy']
         )
-        self.model.summary()
+        if summary:
+            self.model.summary()
 
-    def fit(self, evaluate=False, show_plot=False) -> Any:
+    def fit(self, evaluate=False, show_plot=False, verbose=2) -> Any:
         if self.model is None:
             raise ValueError("Model is not initialized. Call init_model() first.")
         fit_history = self.model.fit(
@@ -168,13 +170,14 @@ class Model:
             validation_split=0.2,
             epochs=50,
             batch_size=128,
+            verbose=verbose,
             callbacks=[
                 keras.callbacks.EarlyStopping(monitor='val_loss', patience=5,
                                               restore_best_weights=True)
             ]
         )
         if evaluate:
-            loss, accuracy = self.evaluate()
+            loss, accuracy = self.evaluate(verbose=verbose)
             print(f"Train loss: {loss}")
             print(f"Train accuracy: {accuracy}")
         if show_plot:
@@ -198,27 +201,28 @@ class Model:
             f"Approx. model memory: {self.model.count_params() * np.dtype(self.model.trainable_weights[0].dtype).itemsize / 1024 ** 2:.2f} MB")
         return fit_history
 
-    def evaluate(self) -> tuple[float, float]:
+    def evaluate(self, verbose=0) -> tuple[float, float]:
         if self.model is None:
             raise ValueError("Model is not initialized. Call init_model() first.")
         return self.model.evaluate(
             np.array(self._mfccs, dtype=np.float32),
-            np.array(self._labels, dtype=np.float32))
+            np.array(self._labels, dtype=np.float32),
+            verbose=verbose)
 
-    def predict(self, mfcc: NDArray[np.float32]) -> None:
+    def predict(self, mfcc: NDArray[np.float32], verbose=0) -> None:
         if self.model is None:
             raise ValueError("Model is not initialized. Call init_model() first.")
         mfcc = np.expand_dims(mfcc, axis=0)  # Add batch dimension
-        prediction = self.model.predict(mfcc)[0]
+        prediction = self.model.predict(mfcc, verbose=verbose)[0]
         print(prediction)
         for i, prob in enumerate(prediction):
             print(f"{Emotion(i).name}: {prob * 100:.2f}%")
 
-    def predict_from_file(self, f: str | os.PathLike[str]) -> None:
+    def predict_from_file(self, f: str | os.PathLike[str], verbose=0) -> None:
         y, _ = librosa.load(f, sr=self._sample_rate)
         mfcc = self.extract_mfcc(y, self._sample_rate, self._n_mfcc)
         print(f"Predict file: {f}")
-        self.predict(mfcc)
+        self.predict(mfcc, verbose=verbose)
 
     def save_model(self, f: str | os.PathLike[str]) -> None:
         if self.model is None:
