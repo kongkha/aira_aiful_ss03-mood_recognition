@@ -10,6 +10,7 @@ import librosa.effects
 import librosa.feature
 import numpy as np
 from numpy.typing import NDArray
+from optree import PyTree
 
 from emotion import Emotion
 
@@ -218,20 +219,22 @@ class Model:
             np.array(self._labels, dtype=np.float32),
             verbose=verbose)
 
-    def predict(self, mfcc: NDArray[np.float32], verbose=0) -> None:
+    def predict(self, mfcc: NDArray[np.float32], verbose=0) -> PyTree[Any]:
         if self.model is None:
             raise ValueError("Model is not initialized. Call init_model() first.")
         mfcc = np.expand_dims(mfcc, axis=0)  # Add batch dimension
         prediction = self.model.predict(mfcc, verbose=verbose)[0]
-        print(prediction)
-        for i, prob in enumerate(prediction):
-            print(f"{Emotion(i).name}: {prob * 100:.2f}%")
+        if verbose:
+            print(prediction)
+            for i, prob in enumerate(prediction):
+                print(f"{Emotion(i).name}: {prob * 100:.2f}%")
+        return prediction
 
-    def predict_from_file(self, f: str | os.PathLike[str], verbose=0) -> None:
+    def predict_from_file(self, f: str | os.PathLike[str], verbose=0) -> PyTree[Any]:
         y, _ = librosa.load(f, sr=self._sample_rate)
         mfcc = self.extract_mfcc(y, self._sample_rate, self._n_mfcc)
         print(f"Predict file: {f}")
-        self.predict(mfcc, verbose=verbose)
+        return self.predict(mfcc, verbose=verbose)
 
     def save_model(self, f: str | os.PathLike[str]) -> None:
         if self.model is None:
